@@ -17,9 +17,7 @@ st.set_page_config(
 
 alt.themes.enable("dark")
 st.title("Sleek Home Assignment - Tal Peer")
-st.header("Explore our results!")
-good_positions = ['Data Scientist', 'Data Engineer', 'Accountant', 'Software Architect', 'Java Developer',
-                  'Facilities Project Manager', 'Licensed Therapist', 'Division Manager']
+st.header("Explore Passage Retrieval and Semantic Search with MiniLM")
 
 queries = ["What is the Sorcerer’s Stone and what does it do?",
            "How does Harry get into Gryffindor?",
@@ -61,8 +59,8 @@ def embedding_model():
 
 
 model = embedding_model()
-chunks_df = pd.read_csv('data/clean_chunks.csv')
-embeddings = load_embeddings('data/clean_embeddings.pkl')
+chunks_df = pd.read_csv('Sleek/data/clean_chunks.csv')
+embeddings = load_embeddings('Sleek/data/clean_embeddings.pkl')
 dim = embeddings.shape
 index = build_faiss_flatl2_index(embeddings, dim)
 
