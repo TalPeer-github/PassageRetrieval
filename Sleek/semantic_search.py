@@ -11,6 +11,7 @@ import matplotlib.pyplot as plt
 import faiss
 from sentence_transformers import SentenceTransformer
 from langchain.text_splitter import RecursiveCharacterTextSplitter
+import pickle
 
 EMBEDDING_MODEL = 'all-MiniLM-L6-v2'
 
@@ -37,7 +38,7 @@ def embedd_dataset(dataset,
     return embeddings
 
 
-def build_faiss_flatl2_index(embeddings: np.ndarray, dim: tuple ):
+def build_faiss_flatl2_index(embeddings: np.ndarray, dim: tuple):
     """
     This function builds a Faiss flat L2 index.
     Args:
@@ -103,7 +104,7 @@ def retrieve_top_passages(query, model, index, chunks, top_n=5):
     return results
 
 
-def create_chunks(texts, split_chunk_size, split_overlap):
+def create_splits(texts, split_chunk_size, split_overlap):
     """
     :param texts: texts to create splits for
     :param split_chunk_size: The maximum size of a chunk, where size is determined by the length_function.
@@ -115,37 +116,66 @@ def create_chunks(texts, split_chunk_size, split_overlap):
         chunk_overlap=split_overlap
     )
 
-    texts_chunks = text_splitter.split_documents(texts)
+    texts_chunks = text_splitter.split_text(texts)
 
     print(f'Created {len(texts_chunks)} chunks from {len(texts)} documents (passages)')
     return texts_chunks
 
-def retreive(model, index, chunks):
+
+def create_book_chunks(book_df, split_chunk_size=1000, split_overlap=0.3):
+    chunks = []
+    for i, chapter_content in enumerate(book_df['processed_content']):
+        chapter_idx = book_df['str_idx'].iloc[i]
+        chapter_chunks = create_splits(chapter_content, split_chunk_size=split_chunk_size, split_overlap=split_overlap)
+        for j, c_chunk in enumerate(chapter_chunks):
+            chunks.append((chapter_idx, j, c_chunk))
+    try:
+        chunks_df = pd.DataFrame.from_records(chunks, columns=["str_idx", "chunk_id", "chunk"])
+        chunks_df.to_csv('data/chunks.csv', index=False)
+        return chunks_df
+    except:
+        print("chunks CSV file could not be created.")
+
+
+def retrieve(model, index, chunks):
     queries = []
     retrieval_results = {query: [] for query in queries}
     for query in queries:
         retrieval_results[query] = retrieve_top_passages(query, model, index, chunks)
 
+
+def save_embeddings(embeddings: np.ndarray, file_path="data/embeddings.pkl"):
+    with open(file_path, "wb") as f:
+        pickle.dump(embeddings, f)
+
+
+def load_embeddings(file_path="data/embeddings.pkl"):
+    with open(file_path, "rb") as f:
+        loaded_embeddings = pickle.load(f)
+    return loaded_embeddings
+
+
 def main():
     book_df = load_df(dir_path="data", file_name="book_df", file_fmt="csv")
-    passages_df = load_df(dir_path="data", file_name="passage_df", file_fmt="csv")
+    passages_df = load_df(dir_path="data", file_name="passages_df", file_fmt="csv")
+
+    chunks_df = create_book_chunks(book_df, split_chunk_size=1000, split_overlap=0.3)
     model = embedding_model()
+
     embeddings = embedd_dataset(
-        dataset=passages_df,
+        dataset=chunks_df,
         rec_num=-1,
         model=model,
+        text_field='chunk',
     )
-    create_chunks(book_df, split_chunk_size=150, split_overlap=0.5)
+    save_embeddings(embeddings)
     embeddings_shape = embeddings.shape
     index = build_faiss_flatl2_index(embeddings, embeddings_shape)
-    chunks = []
-    for i, chapter_content in enumerate(passages_df['content']):
-        chapter_chunks = create_chunks(chapter_content, split_chunk_size=1000, split_overlap=0.3)
-        chunks.append(chapter_chunks)
     # queries = []
     # retrieval_results = {query: [] for query in queries}
     # for query in queries:
     #     retrieval_results[query] = retrieve_top_passages(query, model, index, chunks)
+
 
 if __name__ == "__main__":
     main()
