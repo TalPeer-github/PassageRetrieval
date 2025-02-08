@@ -153,7 +153,7 @@ def build_IVFIndex(embeddings, dim: tuple, _nprob = None):
 
 
 def retrieve_top_passages(query, model, index, chunks, top_n=5):
-    query_embedding = model.encode(clean_text(query), convert_to_numpy=True)
+    query_embedding = model.encode([clean_text(query)], convert_to_numpy=True)
     distances, indices = index.search(query_embedding, top_n)
     retrieved_passages = chunks['chunk'].iloc[indices[0]].tolist()
     return retrieved_passages
