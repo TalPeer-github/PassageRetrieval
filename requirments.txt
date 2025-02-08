@@ -1,0 +1,5 @@
+streamlit
+matplotlib
+faiss-cpu
+sentence-transformers
+pandas
