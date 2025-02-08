@@ -12,8 +12,10 @@ import faiss
 from sentence_transformers import SentenceTransformer
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 import pickle
+from utils import queries, complex_queries
 
 EMBEDDING_MODEL = 'all-MiniLM-L6-v2'
+nlp = spacy.load("en_core_web_sm")
 
 
 def embedding_model():
@@ -21,20 +23,17 @@ def embedding_model():
     return model
 
 
-def embedd_dataset(dataset,
-                   model: SentenceTransformer = SentenceTransformer('all-MiniLM-L6-v2'),
-                   text_field: str = 'content',
-                   rec_num: int = -1) -> np.ndarray:
+def embedd_dataset(dataset, model: SentenceTransformer = SentenceTransformer('all-MiniLM-L6-v2'),
+                   text_field: str = 'content') -> np.ndarray:
     """
     Load a dataset and embedd the text field using a sentence-transformer model
     :param dataset: pandas.DataFrame object to load
     :param model: The model to use for embedding
     :param text_field: The field in the dataset that contains the text
-    :param rec_num: The number of records to load and embedd
     :return: np.ndarray: A tuple containing the dataset and the embeddings
     """
 
-    embeddings = model.encode(dataset[text_field][:rec_num])
+    embeddings = model.encode(dataset[text_field], show_progress_bar=True)
     return embeddings
 
 
@@ -75,15 +74,12 @@ def encode_query(query: str, model):
     return model.encode(query)
 
 
-def compute_recall_at_k(
-        nn_gt: np.ndarray,
-        ann: np.ndarray,
-        k: int,
-):
+def compute_recall_at_k(nn_gt: np.ndarray, ann: np.ndarray, k: int,
+                        ):
     """
     This function computes the recall@k.
     Args:
-        nn_gt: The ground truth nearest neighbors.
+        nn_gt: The ground truth nearest neighbors, which are the closest relatives to chunks.
         ann: The approximate nearest neighbors.
         k: The number of nearest neighbors to consider.
     Returns:
@@ -97,11 +93,11 @@ def load_df(dir_path: str, file_name: str, file_fmt: str):
     return pd.read_csv(file_path)
 
 
-def retrieve_top_passages(query, model, index, chunks, top_n=5):
-    query_embedding = model.encode([query], convert_to_numpy=True)
-    distances, indices = index.search(query_embedding, top_n)
-    results = [(chunks[idx], distances[0][i]) for i, idx in enumerate(indices[0])]
-    return results
+# def retrieve_top_passages(query, model, index, chunks, top_n=5):
+#     query_embedding = model.encode([query], convert_to_numpy=True)
+#     distances, indices = index.search(query_embedding, top_n)
+#     results = [(chunks[idx], distances[0][i]) for i, idx in enumerate(indices[0])]
+#     return results
 
 
 def create_splits(texts, split_chunk_size, split_overlap):
@@ -118,7 +114,7 @@ def create_splits(texts, split_chunk_size, split_overlap):
 
     texts_chunks = text_splitter.split_text(texts)
 
-    print(f'Created {len(texts_chunks)} chunks from {len(texts)} documents (passages)')
+    print(f'Created {len(texts_chunks)} chunks.')
     return texts_chunks
 
 
@@ -131,17 +127,44 @@ def create_book_chunks(book_df, split_chunk_size=1000, split_overlap=0.3):
             chunks.append((chapter_idx, j, c_chunk))
     try:
         chunks_df = pd.DataFrame.from_records(chunks, columns=["str_idx", "chunk_id", "chunk"])
-        chunks_df.to_csv('data/chunks.csv', index=False)
+        chunks_df['processed_chunk'] = chunks_df['chunk'].apply(lambda chunk: clean_text(chunk))
+        chunks_df.to_csv('data/clean_chunks.csv', index=False)
         return chunks_df
     except:
         print("chunks CSV file could not be created.")
 
 
+# def retrieve(model, index, chunks):
+#     retrieval_results = {query: [] for query in queries}
+#     for query in queries:
+#         retrieval_results[query] = retrieve_top_passages(query, model, index, chunks)
+#     return retrieval_results
+
+
+def build_IVFIndex(embeddings, dim: tuple, _nprob = None):
+    nlist = 17
+    quantizer = faiss.IndexFlatL2(dim[1])
+    index = faiss.IndexIVFFlat(quantizer, dim[1], nlist)
+    index.train(embeddings)
+    index.add(embeddings)
+    if _nprob is not None:
+        index.nprobe = _nprob
+    return index
+
+
+def retrieve_top_passages(query, model, index, chunks, top_n=5):
+    query_embedding = model.encode([query], convert_to_numpy=True)
+    distances, indices = index.search(query_embedding, top_n)
+    retrieved_passages = chunks['chunk'].iloc[indices[0]].tolist()
+    return retrieved_passages
+
+
 def retrieve(model, index, chunks):
-    queries = []
-    retrieval_results = {query: [] for query in queries}
-    for query in queries:
+    test_queries = queries + complex_queries
+    retrieval_results = {query: [] for query in test_queries}
+    for query in test_queries:
         retrieval_results[query] = retrieve_top_passages(query, model, index, chunks)
+    return retrieval_results
 
 
 def save_embeddings(embeddings: np.ndarray, file_path="data/embeddings.pkl"):
@@ -155,27 +178,52 @@ def load_embeddings(file_path="data/embeddings.pkl"):
     return loaded_embeddings
 
 
-def main():
+def clean_text(text):
+    """
+    Cleans text by:
+    - Normalizing Unicode characters
+    - Removing special characters and extra whitespace
+    - Lowercasing text
+    - Keeping only alphanumeric characters and essential punctuation
+    """
+    text = re.sub(r"[^a-zA-Z0-9\s.,?!]", "", text)
+    text = re.sub(r"\s+", " ", text).strip()
+    text = text.lower()
+    doc = nlp(text)
+    text = " ".join(token.lemma_ for token in doc)
+    return text
+
+
+def main(create_chunks_df=False):
     book_df = load_df(dir_path="data", file_name="book_df", file_fmt="csv")
-    passages_df = load_df(dir_path="data", file_name="passages_df", file_fmt="csv")
+    # passages_df = load_df(dir_path="data", file_name="passages_df", file_fmt="csv")
 
-    chunks_df = create_book_chunks(book_df, split_chunk_size=1000, split_overlap=0.3)
+    if create_chunks_df:
+        chunks_df = create_book_chunks(book_df, split_chunk_size=1000, split_overlap=0.3)
+    else:
+        chunks_df = load_df(dir_path="data", file_name="chunks", file_fmt="csv")
+
     model = embedding_model()
-
     embeddings = embedd_dataset(
         dataset=chunks_df,
-        rec_num=-1,
         model=model,
-        text_field='chunk',
+        text_field='processed_chunk',
     )
-    save_embeddings(embeddings)
+    save_embeddings(embeddings, file_path='data/clean_embeddings.pkl')
+
+
+def start_():
+    chunks_df = pd.read_csv('data/clean_chunks.csv')
+    embeddings = load_embeddings(file_path='data/clean_embeddings.pkl')
     embeddings_shape = embeddings.shape
-    index = build_faiss_flatl2_index(embeddings, embeddings_shape)
-    # queries = []
-    # retrieval_results = {query: [] for query in queries}
-    # for query in queries:
-    #     retrieval_results[query] = retrieve_top_passages(query, model, index, chunks)
+    model = embedding_model()
+    # index = build_faiss_flatl2_index(embeddings, embeddings_shape)
+    index = build_IVFIndex(embeddings, embeddings_shape, _nprob=2)
+    passages_retrieved = retrieve(model, index, chunks_df)
+    pd.DataFrame.from_dict(passages_retrieved, orient="index").to_csv('data/passages_retrieved_IVF_nprob2.csv')
+    print(passages_retrieved)
 
 
 if __name__ == "__main__":
-    main()
+    # main(create_chunks_df=False)
+    start_()

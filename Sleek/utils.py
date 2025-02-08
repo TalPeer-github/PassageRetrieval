@@ -142,6 +142,15 @@ processed_ = {'Argus Filch', 'Katie Bell', 'Alicia Spinnet', 'Hermione Granger',
                'Arsenus Jigger', 'Cuthbert Binns', 'Helena Ravenclaw', 'Bertie Bott', 'Dean Thomas',
                'Vindictus Viridian', 'Garrick Ollivander', "Dudley's tortoise", 'Rolanda Hooch'}
 
+queries = ["What is the Sorcerer’s Stone?",
+           "How does Harry get into Gryffindor?",
+           "What does the Mirror of Erised show Harry?",
+           "Who helps Harry get past Fluffy?",
+           "What happens during Harry’s first Quidditch match?", ]
+complex_queries = [
+    "How do Harry, Ron, and Hermione manage to bypass each of the obstacles guarding the Sorcerer’s Stone?",
+    "what role does Fluffy play in the protection system?",
+    "Snape’s and Quirrell’s interference Harrys first quidditch match"]
 
 def create_persons_entities():
     entities_set = set()
