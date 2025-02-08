@@ -1,4 +1,5 @@
 import pickle
+import re
 
 import numpy as np
 import streamlit as st
@@ -17,7 +18,8 @@ st.set_page_config(
 
 alt.themes.enable("dark")
 st.title("Sleek Home Assignment - Tal Peer")
-st.header("Explore Passage Retrieval and Semantic Search with MiniLM")
+st.title("📖 Harry Potter Search Engine")
+st.header("Passage Retrieval & Semantic Search with MiniLM")
 
 queries = ["What is the Sorcerer’s Stone and what does it do?",
            "How does Harry get into Gryffindor?",
@@ -58,11 +60,24 @@ def embedding_model():
     return model
 
 def retrieve_top_passages(query, model, index, chunks, top_n=5):
-    query_embedding = model.encode([query], convert_to_numpy=True)
+    query_embedding = model.encode(clean_text(query), convert_to_numpy=True)
     distances, indices = index.search(query_embedding, top_n)
     retrieved_passages = chunks['chunk'].iloc[indices[0]].tolist()
     return retrieved_passages
 
+
+def clean_text(text):
+    """
+    Cleans text by:
+    - Normalizing Unicode characters
+    - Removing special characters and extra whitespace
+    - Lowercasing text
+    - Keeping only alphanumeric characters and essential punctuation
+    """
+    text = re.sub(r"[^a-zA-Z0-9\s.,?!]", "", text)
+    text = re.sub(r"\s+", " ", text).strip()
+    text = text.lower()
+    return text
 
 def retrieve(model, index, chunks):
     test_queries = queries + complex_queries
@@ -97,7 +112,6 @@ selected_position = st.selectbox('Select Query', queries + complex_queries)
 
 colors = ['#164863', '#427D9D', '#9BBEC8', '#DDF2FD', '#F2EBE9', '#6B818C']
 
-st.title("📖 Harry Potter Search Engine")
 st.markdown("Search *Harry Potter and the Sorcerer's Stone* for relevant passages.")
 
 query = st.text_input("Enter your query:")
