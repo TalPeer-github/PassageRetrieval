@@ -3,5 +3,5 @@
   <component name="Black">
     <option name="sdkName" value="talenv" />
   </component>
-  <component name="ProjectRootManager" version="2" project-jdk-name="talenv" project-jdk-type="Python SDK" />
+  <component name="ProjectRootManager" version="2" project-jdk-name="talp" project-jdk-type="Python SDK" />
 </project>

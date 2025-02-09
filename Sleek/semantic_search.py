@@ -1,13 +1,7 @@
 import pandas as pd
 import numpy as np
-import sklearn
 import spacy
-import nltk
 import re
-import torch
-import statsmodels as sm
-import seaborn as sns
-import matplotlib.pyplot as plt
 import faiss
 from sentence_transformers import SentenceTransformer
 from langchain.text_splitter import RecursiveCharacterTextSplitter
@@ -93,12 +87,6 @@ def load_df(dir_path: str, file_name: str, file_fmt: str):
     return pd.read_csv(file_path)
 
 
-# def retrieve_top_passages(query, model, index, chunks, top_n=5):
-#     query_embedding = model.encode([query], convert_to_numpy=True)
-#     distances, indices = index.search(query_embedding, top_n)
-#     results = [(chunks[idx], distances[0][i]) for i, idx in enumerate(indices[0])]
-#     return results
-
 
 def create_splits(texts, split_chunk_size, split_overlap):
     """
@@ -134,14 +122,8 @@ def create_book_chunks(book_df, split_chunk_size=1000, split_overlap=0.3):
         print("chunks CSV file could not be created.")
 
 
-# def retrieve(model, index, chunks):
-#     retrieval_results = {query: [] for query in queries}
-#     for query in queries:
-#         retrieval_results[query] = retrieve_top_passages(query, model, index, chunks)
-#     return retrieval_results
 
-
-def build_IVFIndex(embeddings, dim: tuple, _nprob = None):
+def build_ivf_index(embeddings, dim: tuple, _nprob=None):
     nlist = 17
     quantizer = faiss.IndexFlatL2(dim[1])
     index = faiss.IndexIVFFlat(quantizer, dim[1], nlist)
@@ -155,15 +137,29 @@ def build_IVFIndex(embeddings, dim: tuple, _nprob = None):
 def retrieve_top_passages(query, model, index, chunks, top_n=5):
     query_embedding = model.encode([clean_text(query)], convert_to_numpy=True)
     distances, indices = index.search(query_embedding, top_n)
-    retrieved_passages = chunks['chunk'].iloc[indices[0]].tolist()
-    return retrieved_passages
+    chunk = chunks['chunk'].iloc[indices[0]].tolist()
+    p_chapter = chunks['str_idx'].iloc[indices[0]].tolist()
+    return chunk, p_chapter, indices[0]
+
+
+def extract_entities(indices, chunks):
+    passages = chunks.iloc[indices[0], :]
+    for passage in passages:
+        p_chapter = passage['str_idx']
+        p_title = passage['title']
+        p_content = passage['chunk']
+        p_persons = passage['keywords']
+    # doc = nlp(p_chapter)
+    # persons_list = [entity.text for entity in doc.ents if entity.label_ == 'PERSON']
+    return passages, p_chapter, p_title, p_content, p_persons
 
 
 def retrieve(model, index, chunks):
     test_queries = queries + complex_queries
     retrieval_results = {query: [] for query in test_queries}
     for query in test_queries:
-        retrieval_results[query] = retrieve_top_passages(query, model, index, chunks)
+        r_chunks, r_chapters, indices = retrieve_top_passages(query, model, index, chunks)
+        retrieval_results[query] = indices
     return retrieval_results
 
 
@@ -196,8 +192,6 @@ def clean_text(text):
 
 def main(create_chunks_df=False):
     book_df = load_df(dir_path="data", file_name="book_df", file_fmt="csv")
-    # passages_df = load_df(dir_path="data", file_name="passages_df", file_fmt="csv")
-
     if create_chunks_df:
         chunks_df = create_book_chunks(book_df, split_chunk_size=1000, split_overlap=0.3)
     else:
@@ -212,18 +206,15 @@ def main(create_chunks_df=False):
     save_embeddings(embeddings, file_path='data/clean_embeddings.pkl')
 
 
-def start_():
+def start_search():
     chunks_df = pd.read_csv('data/clean_chunks.csv')
     embeddings = load_embeddings(file_path='data/clean_embeddings.pkl')
     embeddings_shape = embeddings.shape
     model = embedding_model()
-    # index = build_faiss_flatl2_index(embeddings, embeddings_shape)
-    index = build_IVFIndex(embeddings, embeddings_shape, _nprob=2)
-    passages_retrieved = retrieve(model, index, chunks_df)
-    pd.DataFrame.from_dict(passages_retrieved, orient="index").to_csv('data/passages_retrieved_IVF_nprob2.csv')
-    print(passages_retrieved)
+    index = build_ivf_index(embeddings, embeddings_shape, _nprob=2)
+    passages_retrieved_indices = retrieve(model, index, chunks_df)
+    pd.DataFrame.from_dict(passages_retrieved_indices, orient="index").to_csv('data/idx_passages_retrieved_IVF_nprob2.csv')
 
 
 if __name__ == "__main__":
-    # main(create_chunks_df=False)
-    start_()
+    start_search()

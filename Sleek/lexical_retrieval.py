@@ -1,17 +1,12 @@
 import pandas as pd
 import numpy as np
-import sklearn
 import spacy
 import nltk
 import re
-import torch
-import statsmodels as sm
-import seaborn as sns
-import matplotlib.pyplot as plt
-import faiss
+
+from utils import queries, complex_queries
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
-from sklearn.feature_extraction.text import ENGLISH_STOP_WORDS
 
 nltk.download('punkt')
 nlp = spacy.load("en_core_web_sm")
@@ -59,11 +54,11 @@ def clean_text(text):
     :param text: text to process
     :return: processed text
     """
-    text = text.lower()  # Convert to lowercase
-    text = re.sub(r'\s+', ' ', text)  # Remove extra spaces and newlines
-    text = re.sub(r'[“”‘’]', '"', text)  # Normalize quotes
-    text = re.sub(r'[-—]', ' ', text)  # Normalize dashes
-    text = re.sub(r'[^a-z0-9\s]', '', text)  # Remove special characters
+    text = text.lower()
+    text = re.sub(r'\s+', ' ', text)
+    text = re.sub(r'[“”‘’]', '"', text)
+    text = re.sub(r'[-—]', ' ', text)
+    text = re.sub(r'[^a-z0-9\s]', '', text)
     return text
 
 
@@ -96,24 +91,19 @@ def preprocess_text(text):
     return passages
 
 
+def tf_idf_retrieve(passages, k=5):
+    vectorizer = TfidfVectorizer(stop_words="english")  # , max_df=0.9, min_df=2)
+    tfidf_matrix = vectorizer.fit_transform(passages['chunk'])
+    indices_dict = {query: [] for query in queries}
+    for query in indices_dict.keys():
+        query_vector = vectorizer.transform([query])
+        similarity_scores = cosine_similarity(query_vector, tfidf_matrix)
+        ranked_indices = np.argsort(similarity_scores[0])[::-1][:k]
+        indices_dict[query] = ranked_indices
+    return indices_dict
+
+
 if __name__ == '__main__':
-    book_text = load_data()
-    # print(book_text)
-    passages = preprocess_corpus(book_text)
-
-    query = ["Who is Harry Potter?"]
-
-    vectorizer = TfidfVectorizer(stop_words="english") #, max_df=0.9, min_df=2)
-    tfidf_matrix = vectorizer.fit_transform(passages)
-    query_vector = vectorizer.transform(query)
-
-    similarity_scores = cosine_similarity(query_vector, tfidf_matrix)
-
-    ranked_indices = np.argsort(similarity_scores[0])[::-1]
-    print(ranked_indices)
-    print("Top 5 Relevant Passages:")
-    for i in range(5):
-
-        idx = ranked_indices[i]
-        print(f"\nRank {i + 1}, Score: {similarity_scores[0][idx]:.4f}")
-        print(passages[idx])
+    passages = load_data_df(dir_path="data", file_name="clean_chunks", file_fmt="csv")
+    tf_idf_df = tf_idf_retrieve(passages, k=5)
+    pd.DataFrame.from_dict(tf_idf_df, orient="index").to_csv('data/idx_passages_retrieved_TFIDF_k10.csv')
