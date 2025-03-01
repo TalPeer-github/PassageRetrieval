@@ -26,8 +26,7 @@ Evaluation pipeline can be found in notebook 'results_open_question.ipynb', or r
 python Sleek/evaluation.py
 ```
 
-
-
+![](imgs/app_scr.png)
 ##### Bib
 
 https://www.pinecone.io/learn/offline-evaluation/#Metrics-in-Information-Retrieval
